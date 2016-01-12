@@ -1,22 +1,21 @@
 # react-native-image-picker
-A React Native module that allows you to use the native UIImagePickerController UI to either select a photo from the device library or directly from the camera, like so:
+A React Native module that allows you to use native UI to select a photo/video from the device library or directly from the camera, like so:
 
 ### iOS
-** Requires iOS 8 or higher
 
-<img title="IOS" src="https://github.com/marcshilling/react-native-image-picker/blob/master/AlertSheetImage.jpg" width="50%">
+<img title="iOS" src="https://github.com/marcshilling/react-native-image-picker/blob/master/images/ios-image.png" width="50%">
 
 ### Android
-** Requires Api 11 or higher for Android
+**Requires Api 11 or higher for Android**
 
-<img title="Android" src="http://i.imgur.com/jMOLd6w.png" width="49%">
+<img title="Android" src="https://github.com/marcshilling/react-native-image-picker/blob/master/images/android-image.png" width="50%">
 
 ## Install
 
 ### iOS
 1. `npm install react-native-image-picker@latest --save`
 2. In the XCode's "Project navigator", right click on your project's Libraries folder ➜ `Add Files to <...>`
-3. Go to `node_modules` ➜ `react-native-image-picker` ➜ select the `UIImagePickerManager` folder **Make sure you have 'Create Groups' selected**
+3. Go to `node_modules` ➜ `react-native-image-picker` ➜ `ios` ➜ select `UIImagePickerManager.h` and `UIImagePickerManager.m`
 4. Make sure `UIImagePickerManager.m` is listed under 'Compile Sources' in your project's 'Build Phases' tab
 5. Compile and have fun
 
@@ -38,6 +37,24 @@ dependencies {
     ...
     compile project(':react-native-image-picker')
 }
+```
+```xml
+<!-- file: android/src/main/AndroidManifest.xml -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.myApp">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- add following permissions and the min targeted version -->
+    <uses-sdk
+            android:minSdkVersion="11"/>
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-feature android:name="android.hardware.camera"
+                  android:required="true"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" />
+    <!-- -->
+    ...
 ```
 ```java
 // file: android/app/src/main/java/com/myappli/MainActivity.java
@@ -77,11 +94,13 @@ public class MainActivity extends Activity implements DefaultHardwareBackBtnHand
         setContentView(mReactRootView);
     }
 
+    ...
+
+    // handle onActivityResult
     @Override
     public void onActivityResult(final int requestCode, final int resultCode, final Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        // handle onActivityResult
         mImagePicker.handleActivityResult(requestCode, resultCode, data);
     }
 ...
@@ -105,46 +124,56 @@ var UIImagePickerManager = require('NativeModules').UIImagePickerManager;
     customButtons: {
       'Choose Photo from Facebook': 'fb', // [Button Text] : [String returned upon selection]
     },
-    maxWidth: 100,
-    maxHeight: 100,
-    quality: 0.2,
+    cameraType: 'back', // 'front' or 'back'
+    mediaType: 'photo', // 'photo' or 'video'
+    videoQuality: 'high', // 'low', 'medium', or 'high'
+    maxWidth: 100, // photos only
+    maxHeight: 100, // photos only
+    quality: 0.2, // photos only
     allowsEditing: false, // Built in iOS functionality to resize/reposition the image
-    noData: false, // Disables the base64 `data` field from being generated (greatly improves performance on large photos)
+    noData: false, // photos only - disables the base64 `data` field from being generated (greatly improves performance on large photos)
     storageOptions: { // if this key is provided, the image will get saved in the documents directory (rather than a temporary directory)
       skipBackup: true, // image will NOT be backed up to icloud
       path: 'images' // will save image at /Documents/images rather than the root
     }
   };
 
-  /** 
+  /**
    * The first arg will be the options object for customization, the second is
    * your callback which sends bool: didCancel, object: response.
    *
-   * response.data is the base64 encoded image data
-   * response.uri is the uri to the local file asset on the device
+   * response.didCancel will inform you if the user cancelled the process
+   * response.error will contain an error message, if there is one
+   * response.data is the base64 encoded image data (photos only)
+   * response.uri is the uri to the local file asset on the device (photo or video)
    * response.isVertical will be true if the image is vertically oriented
    * response.width & response.height give you the image dimensions
    */
 
-  UIImagePickerManager.showImagePicker(options, (didCancel, response) => {
+  UIImagePickerManager.showImagePicker(options, (response) => {
     console.log('Response = ', response);
 
-    if (didCancel) {
+    if (response.didCancel) {
       console.log('User cancelled image picker');
     }
+    else if (response.error) {
+      console.log('UIImagePickerManager Error: ', response.error);
+    }
+    else if (response.customButton) {
+      console.log('User tapped custom button: ', response.customButton);
+    }
     else {
-      if (response.customButton) {
-        console.log('User tapped custom button: ', response.customButton);
-      }
-      else {
-        // You can display the image using either:
-        const source = {uri: 'data:image/jpeg;base64,' + response.data, isStatic: true};
-        const source = {uri: response.uri.replace('file://', ''), isStatic: true};
+      // You can display the image using either data:
+      const source = {uri: 'data:image/jpeg;base64,' + response.data, isStatic: true};
+      
+      // uri (on iOS)
+      const source = {uri: response.uri.replace('file://', ''), isStatic: true};
+      // uri (on android)
+      const source = {uri: response.uri, isStatic: true};
 
-        this.setState({
-          avatarSource: source
-        });
-      }
+      this.setState({
+        avatarSource: source
+      });
     }
   });
   ```
@@ -159,12 +188,12 @@ var UIImagePickerManager = require('NativeModules').UIImagePickerManager;
   do the following:
   ```javascript
   // Launch Camera:
-  UIImagePickerManager.launchCamera(options, (didCancel, response)  => {
+  UIImagePickerManager.launchCamera(options, (response)  => {
     // Same code as in above section!
   });
 
   // Open Image Library:
-  UIImagePickerManager.launchImageLibrary(options, (didCancel, response)  => {
+  UIImagePickerManager.launchImageLibrary(options, response)  => {
     // Same code as in above section!
   });
   ```
@@ -178,6 +207,9 @@ cancelButtonTitle | OK | OK
 takePhotoButtonTitle | OK | OK
 chooseFromLibraryButtonTitle | OK | OK
 customButtons | OK | -
+cameraType | OK | -
+mediaType | OK | -
+videoQuality | OK | -
 maxWidth | OK | OK
 maxHeight | OK | OK
 quality | OK | OK
