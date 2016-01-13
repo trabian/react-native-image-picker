@@ -12,6 +12,7 @@ import android.widget.ArrayAdapter;
 import android.content.DialogInterface;
 import android.graphics.BitmapFactory;
 import android.graphics.Bitmap;
+import android.graphics.Matrix;
 import android.media.ExifInterface;
 import android.content.ComponentName;
 
@@ -220,6 +221,7 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     : data.getData();
 
     String realPath = getRealPathFromURI(uri);
+    int angle = 0;
 
     boolean isUrl = true;
     try {
@@ -241,11 +243,16 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
         int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
         boolean isVertical = true ;
         switch (orientation) {
-            case ExifInterface.ORIENTATION_ROTATE_270:
-                isVertical = false ;
-                break;
             case ExifInterface.ORIENTATION_ROTATE_90:
                 isVertical = false ;
+                angle = 90;
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_180:
+                angle = 180;
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_270:
+                isVertical = false ;
+                angle = 270;
                 break;
         }
         response.putBoolean("isVertical", isVertical);
@@ -257,19 +264,22 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
     }
 
     BitmapFactory.Options options = new BitmapFactory.Options();
+    
     options.inJustDecodeBounds = true;
+    
     Bitmap photo = BitmapFactory.decodeFile(realPath, options);
+    
     int initialWidth = options.outWidth;
     int initialHeight = options.outHeight;
 
     // don't create a new file if contraint are respected
     if (((initialWidth < maxWidth && maxWidth > 0) || maxWidth == 0)
             && ((initialHeight < maxHeight && maxHeight > 0) || maxHeight == 0)
-            && quality == 100) {
+            && (quality == 100) && (angle == 0)) {
         response.putInt("width", initialWidth);
         response.putInt("height", initialHeight);
     } else {
-        uri = getResizedImage(getRealPathFromURI(uri), initialWidth, initialHeight);
+        uri = getResizedImage(getRealPathFromURI(uri), initialWidth, initialHeight, angle);
         realPath = getRealPathFromURI(uri);
         photo = BitmapFactory.decodeFile(realPath, options);
         response.putInt("width", options.outWidth);
@@ -331,29 +341,32 @@ public class ImagePickerModule extends ReactContextBaseJavaModule {
    * @param initialHeight
    * @return uri of resized file
    */
-  private Uri getResizedImage (final String realPath, final int initialWidth, final int initialHeight) {
+  private Uri getResizedImage (final String realPath, final int initialWidth, final int initialHeight, final int angle) {
     final BitmapFactory.Options options = new BitmapFactory.Options();
-    options.inSampleSize = 8;
+    options.inSampleSize = 1;
     Bitmap photo = BitmapFactory.decodeFile(realPath, options);
 
     Bitmap scaledphoto = null;
     if (maxWidth == 0) {
-        maxWidth  = initialWidth;
+        maxWidth = initialWidth;
     }
     if (maxHeight == 0) {
         maxHeight = initialHeight;
     }
-    double widthRatio = (double)maxWidth / initialWidth;
-    double heightRatio = (double)maxHeight / initialHeight;
+    float widthRatio = ((float) maxWidth) / initialWidth;
+    float heightRatio = ((float) maxHeight) / initialHeight;
 
-    double ratio = (widthRatio < heightRatio)
+    float ratio = (widthRatio < heightRatio)
             ? widthRatio
             : heightRatio;
 
-    int newWidth = (int)(initialWidth * ratio);
-    int newHeight = (int)(initialHeight * ratio);
+    Matrix matrix = new Matrix();
 
-    scaledphoto = Bitmap.createScaledBitmap(photo, newWidth, newHeight, true);
+    matrix.postRotate(angle);
+    matrix.postScale(ratio, ratio);
+
+    scaledphoto = Bitmap.createBitmap(photo, 0, 0, photo.getWidth(), photo.getHeight(), matrix, true);
+    
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     scaledphoto.compress(Bitmap.CompressFormat.JPEG, quality, bytes);
     String filname = UUID.randomUUID().toString();
